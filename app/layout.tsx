@@ -1,38 +1,36 @@
 import type { Metadata } from "next";
-import { Inter, Outfit } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
-import { cn } from "@/lib/utils";
-import { Toaster } from "@/components/ui/toaster";
+import { Providers } from "@/lib/providers";
+import { Sidebar } from "@/components/dashboard/sidebar";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
-const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit" });
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-sans",
+});
 
 export const metadata: Metadata = {
-    title: "WhatsApp Dashboard | Manage Your Instances",
-    description: "A powerful dashboard to manage your WhatsApp instances, contacts, and messages efficiently.",
-    metadataBase: new URL("https://whatsappx.com"), // Replace with actual domain if known, or localhost for now
-    openGraph: {
-        title: "WhatsApp Dashboard",
-        description: "Manage your WhatsApp instances and messages",
-        type: "website",
-    },
+  title: "WhatsApp Dashboard | Evolution API v2",
+  description: "Modern WhatsApp management dashboard powered by Evolution API v2",
 };
 
 export default function RootLayout({
-    children,
+  children,
 }: Readonly<{
-    children: React.ReactNode;
+  children: React.ReactNode;
 }>) {
-    return (
-        <html lang="en">
-            <body className={cn(
-                "min-h-screen bg-background font-sans antialiased",
-                inter.variable,
-                outfit.variable
-            )}>
-                {children}
-                <Toaster />
-            </body>
-        </html>
-    );
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body className={inter.className}>
+        <Providers>
+          <div className="flex h-screen overflow-hidden">
+            <Sidebar />
+            <main className="flex-1 overflow-y-auto bg-muted/10">
+              {children}
+            </main>
+          </div>
+        </Providers>
+      </body>
+    </html>
+  );
 }

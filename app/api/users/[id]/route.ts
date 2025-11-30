@@ -1,247 +1,157 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { hashPassword } from '@/lib/auth';
-import { requireAdmin } from '@/lib/middleware';
+import { Pool } from 'pg';
+import bcrypt from 'bcryptjs';
+import { auth } from '@/lib/auth';
 
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+// GET /api/users/[id] - Get user by ID
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const authResult = await requireAdmin(request);
-    if (authResult.response) {
-      return authResult.response;
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = parseInt(params.id);
+    if (!session.user.permissions.includes('users.read')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
-    const user = await db.user.findUnique({
-      where: { id: userId },
-      include: {
-        userRoles: {
-          include: {
-            role: {
-              include: {
-                rolePermissions: {
-                  include: {
-                    permission: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        'SELECT * FROM v_users_with_roles WHERE id = $1',
+        [params.id]
       );
-    }
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        isActive: user.isActive,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-        roles: user.userRoles.map(ur => ({
-          id: ur.role.id,
-          name: ur.role.name,
-          description: ur.role.description,
-        })),
-        permissions: user.userRoles.flatMap(ur =>
-          ur.role.rolePermissions.map(rp => ({
-            resource: rp.permission.resource,
-            action: rp.permission.action,
-          }))
-        ),
-      },
-    });
-  } catch (error) {
-    console.error('Get user error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+      if (result.rows.length === 0) {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      }
+
+      return NextResponse.json({ user: result.rows[0] });
+    } finally {
+      client.release();
+    }
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-export async function PUT(
+// PATCH /api/users/[id] - Update user
+export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const authResult = await requireAdmin(request);
-    if (authResult.response) {
-      return authResult.response;
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = parseInt(params.id);
+    if (!session.user.permissions.includes('users.update')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body = await request.json();
-    const { email, username, password, firstName, lastName, isActive, roleIds } = body;
+    const { name, roleId, isActive, isVerified, password } = body;
 
-    // Check if user exists
-    const existingUser = await db.user.findUnique({
-      where: { id: userId },
-    });
+    const client = await pool.connect();
+    try {
+      const updates: string[] = [];
+      const values: any[] = [];
+      let paramCount = 1;
 
-    if (!existingUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
+      if (name !== undefined) {
+        updates.push(`name = $${paramCount++}`);
+        values.push(name);
+      }
+      if (roleId !== undefined) {
+        updates.push(`role_id = $${paramCount++}`);
+        values.push(roleId);
+      }
+      if (isActive !== undefined) {
+        updates.push(`is_active = $${paramCount++}`);
+        values.push(isActive);
+      }
+      if (isVerified !== undefined) {
+        updates.push(`is_verified = $${paramCount++}`);
+        values.push(isVerified);
+      }
+      if (password) {
+        const passwordHash = await bcrypt.hash(password, 10);
+        updates.push(`password_hash = $${paramCount++}`);
+        values.push(passwordHash);
+      }
+
+      if (updates.length === 0) {
+        return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
+      }
+
+      values.push(params.id);
+
+      const result = await client.query(
+        `UPDATE users SET ${updates.join(', ')}, updated_at = NOW()
+         WHERE id = $${paramCount}
+         RETURNING id, email, name, role_id, is_active, is_verified, updated_at`,
+        values
       );
-    }
 
-    // Check if email/username already taken by another user
-    if (email || username) {
-      const duplicateUser = await db.user.findFirst({
-        where: {
-          AND: [
-            { id: { not: userId } },
-            {
-              OR: [
-                email ? { email } : {},
-                username ? { username } : {},
-              ],
-            },
-          ],
-        },
-      });
-
-      if (duplicateUser) {
-        return NextResponse.json(
-          { error: 'Email or username already taken' },
-          { status: 409 }
-        );
+      if (result.rows.length === 0) {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 });
       }
+
+      return NextResponse.json({ user: result.rows[0] });
+    } finally {
+      client.release();
     }
-
-    // Prepare update data
-    const updateData: any = {};
-    if (email !== undefined) updateData.email = email;
-    if (username !== undefined) updateData.username = username;
-    if (firstName !== undefined) updateData.firstName = firstName || null;
-    if (lastName !== undefined) updateData.lastName = lastName || null;
-    if (isActive !== undefined) updateData.isActive = isActive;
-    if (password) {
-      if (password.length < 6) {
-        return NextResponse.json(
-          { error: 'Password must be at least 6 characters' },
-          { status: 400 }
-        );
-      }
-      updateData.password = await hashPassword(password);
-    }
-
-    // Update user
-    const user = await db.user.update({
-      where: { id: userId },
-      data: updateData,
-    });
-
-    // Update roles if provided
-    if (roleIds !== undefined) {
-      // Delete existing roles
-      await db.userRole.deleteMany({
-        where: { userId },
-      });
-
-      // Add new roles
-      if (roleIds.length > 0) {
-        await db.userRole.createMany({
-          data: roleIds.map((roleId: number) => ({
-            userId,
-            roleId,
-            assignedById: authResult.user!.id,
-          })),
-        });
-      }
-    }
-
-    // Fetch updated user with roles
-    const updatedUser = await db.user.findUnique({
-      where: { id: userId },
-      include: {
-        userRoles: {
-          include: {
-            role: true,
-          },
-        },
-      },
-    });
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        ...updatedUser!,
-        password: undefined,
-        roles: updatedUser!.userRoles.map(ur => ur.role.name),
-      },
-    });
-  } catch (error) {
-    console.error('Update user error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
+// DELETE /api/users/[id] - Delete user
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const authResult = await requireAdmin(request);
-    if (authResult.response) {
-      return authResult.response;
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = parseInt(params.id);
+    if (!session.user.permissions.includes('users.delete')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
-    // Prevent self-deletion
-    if (userId === authResult.user!.id) {
+    // Prevent deleting yourself
+    if (session.user.id === params.id) {
       return NextResponse.json(
         { error: 'Cannot delete your own account' },
         { status: 400 }
       );
     }
 
-    // Check if user exists
-    const user = await db.user.findUnique({
-      where: { id: userId },
-    });
+    const client = await pool.connect();
+    try {
+      const result = await client.query('DELETE FROM users WHERE id = $1 RETURNING id', [
+        params.id,
+      ]);
 
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
+      if (result.rows.length === 0) {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      }
+
+      return NextResponse.json({ message: 'User deleted successfully' });
+    } finally {
+      client.release();
     }
-
-    // Delete user (cascade will delete related records)
-    await db.user.delete({
-      where: { id: userId },
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: 'User deleted successfully',
-    });
-  } catch (error) {
-    console.error('Delete user error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-

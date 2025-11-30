@@ -1,126 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { requireAdmin } from '@/lib/middleware';
+import { Pool } from 'pg';
+import { auth } from '@/lib/auth';
 
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+// GET /api/roles - List all roles
 export async function GET(request: NextRequest) {
   try {
-    const authResult = await requireAdmin(request);
-    if (authResult.response) {
-      return authResult.response;
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const roles = await db.role.findMany({
-      include: {
-        rolePermissions: {
-          include: {
-            permission: true,
-          },
-        },
-        _count: {
-          select: {
-            userRoles: true,
-          },
-        },
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    });
+    const client = await pool.connect();
+    try {
+      const result = await client.query(`
+        SELECT id, name, description, created_at, updated_at
+        FROM roles
+        ORDER BY name
+      `);
 
-    return NextResponse.json({
-      success: true,
-      data: roles.map(role => ({
-        id: role.id,
-        name: role.name,
-        description: role.description,
-        createdAt: role.createdAt,
-        updatedAt: role.updatedAt,
-        userCount: role._count.userRoles,
-        permissions: role.rolePermissions.map(rp => ({
-          id: rp.permission.id,
-          name: rp.permission.name,
-          resource: rp.permission.resource,
-          action: rp.permission.action,
-        })),
-      })),
-    });
-  } catch (error) {
-    console.error('Get roles error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+      return NextResponse.json({ roles: result.rows });
+    } finally {
+      client.release();
+    }
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-
-export async function POST(request: NextRequest) {
-  try {
-    const authResult = await requireAdmin(request);
-    if (authResult.response) {
-      return authResult.response;
-    }
-
-    const body = await request.json();
-    const { name, description, permissionIds } = body;
-
-    if (!name) {
-      return NextResponse.json(
-        { error: 'Role name is required' },
-        { status: 400 }
-      );
-    }
-
-    // Check if role already exists
-    const existingRole = await db.role.findUnique({
-      where: { name },
-    });
-
-    if (existingRole) {
-      return NextResponse.json(
-        { error: 'Role with this name already exists' },
-        { status: 409 }
-      );
-    }
-
-    // Create role
-    const role = await db.role.create({
-      data: {
-        name,
-        description: description || null,
-        rolePermissions: permissionIds && permissionIds.length > 0 ? {
-          create: permissionIds.map((permissionId: number) => ({
-            permissionId,
-          })),
-        } : undefined,
-      },
-      include: {
-        rolePermissions: {
-          include: {
-            permission: true,
-          },
-        },
-      },
-    });
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        id: role.id,
-        name: role.name,
-        description: role.description,
-        permissions: role.rolePermissions.map(rp => ({
-          id: rp.permission.id,
-          resource: rp.permission.resource,
-          action: rp.permission.action,
-        })),
-      },
-    }, { status: 201 });
-  } catch (error) {
-    console.error('Create role error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
-

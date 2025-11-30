@@ -1,135 +1,95 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { hashPassword } from '@/lib/auth';
-import { requireAdmin } from '@/lib/middleware';
+import { Pool } from 'pg';
+import bcrypt from 'bcryptjs';
+import { auth } from '@/lib/auth';
 
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+// GET /api/users - List all users
 export async function GET(request: NextRequest) {
   try {
-    const authResult = await requireAdmin(request);
-    if (authResult.response) {
-      return authResult.response;
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const users = await db.user.findMany({
-      select: {
-        id: true,
-        email: true,
-        username: true,
-        firstName: true,
-        lastName: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true,
-        userRoles: {
-          include: {
-            role: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    // Check permission
+    if (!session.user.permissions.includes('users.read')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
-    return NextResponse.json({
-      success: true,
-      data: users.map(user => ({
-        ...user,
-        roles: user.userRoles.map(ur => ur.role.name),
-      })),
-    });
-  } catch (error) {
-    console.error('Get users error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    const client = await pool.connect();
+    try {
+      const result = await client.query(`
+        SELECT * FROM v_users_with_roles
+        ORDER BY created_at DESC
+      `);
+
+      return NextResponse.json({ users: result.rows });
+    } finally {
+      client.release();
+    }
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
+// POST /api/users - Create new user
 export async function POST(request: NextRequest) {
   try {
-    const authResult = await requireAdmin(request);
-    if (authResult.response) {
-      return authResult.response;
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!session.user.permissions.includes('users.create')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const body = await request.json();
-    const { email, username, password, firstName, lastName, roleIds } = body;
+    const { email, password, name, roleId, isActive = true, isVerified = false } = body;
 
-    if (!email || !username || !password) {
+    // Validate required fields
+    if (!email || !password || !name || !roleId) {
       return NextResponse.json(
-        { error: 'Email, username, and password are required' },
+        { error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
-    if (password.length < 6) {
-      return NextResponse.json(
-        { error: 'Password must be at least 6 characters' },
-        { status: 400 }
+    const client = await pool.connect();
+    try {
+      // Check if email already exists
+      const existingUser = await client.query(
+        'SELECT id FROM users WHERE email = $1',
+        [email]
       );
-    }
 
-    // Check if user already exists
-    const existingUser = await db.user.findFirst({
-      where: {
-        OR: [
-          { email },
-          { username },
-        ],
-      },
-    });
+      if (existingUser.rows.length > 0) {
+        return NextResponse.json(
+          { error: 'Email already exists' },
+          { status: 400 }
+        );
+      }
 
-    if (existingUser) {
-      return NextResponse.json(
-        { error: 'User with this email or username already exists' },
-        { status: 409 }
+      // Hash password
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      // Insert user
+      const result = await client.query(
+        `INSERT INTO users (email, password_hash, name, role_id, is_active, is_verified, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id, email, name, role_id, is_active, is_verified, created_at`,
+        [email, passwordHash, name, roleId, isActive, isVerified, session.user.id]
       );
+
+      return NextResponse.json({ user: result.rows[0] }, { status: 201 });
+    } finally {
+      client.release();
     }
-
-    // Hash password
-    const hashedPassword = await hashPassword(password);
-
-    // Create user
-    const user = await db.user.create({
-      data: {
-        email,
-        username,
-        password: hashedPassword,
-        firstName: firstName || null,
-        lastName: lastName || null,
-        createdById: authResult.user!.id,
-        userRoles: roleIds && roleIds.length > 0 ? {
-          create: roleIds.map((roleId: number) => ({
-            roleId,
-            assignedById: authResult.user!.id,
-          })),
-        } : undefined,
-      },
-      include: {
-        userRoles: {
-          include: {
-            role: true,
-          },
-        },
-      },
-    });
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        ...user,
-        password: undefined,
-        roles: user.userRoles.map(ur => ur.role.name),
-      },
-    }, { status: 201 });
-  } catch (error) {
-    console.error('Create user error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-
