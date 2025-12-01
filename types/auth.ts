@@ -147,11 +147,13 @@ declare module 'next-auth' {
     user: AuthUser;
   }
 
-  interface User extends AuthUser {}
+  interface User extends AuthUser { }
 }
 
+import { JWT } from 'next-auth/jwt';
+
 declare module 'next-auth/jwt' {
-  interface JWT extends AuthUser {}
+  interface JWT extends AuthUser { }
 }
 
 // API Response Types

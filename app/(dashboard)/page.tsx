@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getEvolutionAPI } from "@/lib/evolution-api";
+import { getEvolutionAPI, EvolutionAPIClient } from "@/lib/evolution-api";
 import {
     Folder,
     Activity,
@@ -15,6 +15,18 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+
+async function getClient(userId: string) {
+    const user = await prisma.user.findUnique({
+        where: { id: parseInt(userId) },
+        select: { evolutionApiUrl: true, evolutionApiKey: true }
+    });
+
+    if (user?.evolutionApiUrl && user?.evolutionApiKey) {
+        return new EvolutionAPIClient(user.evolutionApiUrl, user.evolutionApiKey);
+    }
+    return getEvolutionAPI();
+}
 
 export default async function DashboardPage() {
     let session;
@@ -35,10 +47,12 @@ export default async function DashboardPage() {
     let instances: any[] = [];
 
     try {
+        const api = await getClient(session.user.id);
+
         // Run independently to prevent one failure from blocking the other
         const results = await Promise.allSettled([
             prisma.contactCache.count(),
-            getEvolutionAPI().fetchInstances()
+            api.fetchInstances()
         ]);
 
         if (results[0].status === 'fulfilled') {
@@ -48,7 +62,12 @@ export default async function DashboardPage() {
         }
 
         if (results[1].status === 'fulfilled') {
-            instances = results[1].value;
+            const response: any = results[1].value;
+            if (Array.isArray(response)) {
+                instances = response;
+            } else if (response && Array.isArray(response.data)) {
+                instances = response.data;
+            }
         } else {
             console.error("Failed to fetch instances:", results[1].reason);
         }

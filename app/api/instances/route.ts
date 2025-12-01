@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { getEvolutionAPI } from '@/lib/evolution-api';
+import { getEvolutionAPI, EvolutionAPIClient } from '@/lib/evolution-api';
+import { prisma } from '@/lib/prisma';
+
+async function getClient(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: parseInt(userId) },
+    select: { evolutionApiUrl: true, evolutionApiKey: true }
+  });
+
+  if (user?.evolutionApiUrl && user?.evolutionApiKey) {
+    return new EvolutionAPIClient(user.evolutionApiUrl, user.evolutionApiKey);
+  }
+  return getEvolutionAPI();
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,7 +26,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const api = getEvolutionAPI();
+    const api = await getClient(session.user.id);
     const instances = await api.fetchInstances();
 
     return NextResponse.json(instances);
@@ -47,7 +60,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const api = getEvolutionAPI();
+    const api = await getClient(session.user.id);
     const result = await api.createInstance({ instanceName });
 
     return NextResponse.json(result, { status: 201 });

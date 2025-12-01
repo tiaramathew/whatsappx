@@ -21,7 +21,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import { useInstancesStore } from "@/lib/store/instances";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export const SettingsForm = () => {
     const { selectedInstance, instances } = useInstancesStore();
@@ -30,19 +30,32 @@ export const SettingsForm = () => {
     const [alwaysOnline, setAlwaysOnline] = useState(false);
     const [readMessages, setReadMessages] = useState(false);
     const [instance, setInstance] = useState(selectedInstance || "");
+
+    // Evolution API Config
+    const [evolutionUrl, setEvolutionUrl] = useState("");
+    const [evolutionKey, setEvolutionKey] = useState("");
+
     const { toast } = useToast();
+
+    useEffect(() => {
+        // Fetch existing settings
+        const fetchSettings = async () => {
+            try {
+                const response = await fetch('/api/settings');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.evolutionApiUrl) setEvolutionUrl(data.evolutionApiUrl);
+                    if (data.evolutionApiKey) setEvolutionKey(data.evolutionApiKey);
+                }
+            } catch (error) {
+                console.error("Failed to fetch settings", error);
+            }
+        };
+        fetchSettings();
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        if (!instance) {
-            toast({
-                title: "Error",
-                description: "Please select an instance",
-                variant: "destructive",
-            });
-            return;
-        }
 
         setLoading(true);
         try {
@@ -54,6 +67,8 @@ export const SettingsForm = () => {
                     rejectCall,
                     alwaysOnline,
                     readMessages,
+                    evolutionApiUrl: evolutionUrl,
+                    evolutionApiKey: evolutionKey,
                 }),
             });
 
@@ -80,6 +95,38 @@ export const SettingsForm = () => {
     return (
         <form onSubmit={handleSubmit}>
             <div className="grid gap-6">
+                {/* Evolution API Configuration */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Evolution API Configuration</CardTitle>
+                        <CardDescription>
+                            Enter your Evolution API credentials to connect your instances.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid gap-2">
+                            <Label htmlFor="evolution-url">API URL</Label>
+                            <Input
+                                id="evolution-url"
+                                placeholder="https://api.yourdomain.com"
+                                value={evolutionUrl}
+                                onChange={(e) => setEvolutionUrl(e.target.value)}
+                            />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="evolution-key">API Key</Label>
+                            <Input
+                                id="evolution-key"
+                                type="password"
+                                placeholder="Your Global API Key"
+                                value={evolutionKey}
+                                onChange={(e) => setEvolutionKey(e.target.value)}
+                            />
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Instance Settings */}
                 <Card>
                     <CardHeader>
                         <CardTitle>Instance Settings</CardTitle>
@@ -90,7 +137,7 @@ export const SettingsForm = () => {
                     <CardContent className="space-y-4">
                         <div className="grid gap-2">
                             <Label htmlFor="instance">Select Instance</Label>
-                            <Select value={instance} onValueChange={setInstance} required>
+                            <Select value={instance} onValueChange={setInstance}>
                                 <SelectTrigger id="instance">
                                     <SelectValue placeholder="Choose an instance" />
                                 </SelectTrigger>

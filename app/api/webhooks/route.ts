@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { getEvolutionAPI } from '@/lib/evolution-api';
-import { Pool } from 'pg';
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+import { prisma } from '@/lib/prisma';
 
 // POST /api/webhooks - Receive webhook events (no auth required)
 export async function POST(request: NextRequest) {
@@ -13,16 +9,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     // Store webhook event in database
-    const client = await pool.connect();
-    try {
-      await client.query(
-        `INSERT INTO webhook_events (instance_name, event, data, received_at)
-         VALUES ($1, $2, $3, NOW())`,
-        [body.instance || 'unknown', body.event || 'unknown', JSON.stringify(body)]
-      );
-    } finally {
-      client.release();
-    }
+    await prisma.webhookEvent.create({
+      data: {
+        instanceName: body.instance || 'unknown',
+        eventType: body.event || 'unknown',
+        payload: body,
+      }
+    });
 
     return NextResponse.json({ message: 'Webhook received' }, { status: 200 });
   } catch (error: any) {
@@ -96,7 +89,7 @@ export async function PUT(request: NextRequest) {
       enabled,
       url,
       events,
-      webhookByEvents,
+      webhook_by_events: webhookByEvents,
     });
 
     return NextResponse.json({ message: 'Webhook configured successfully' });

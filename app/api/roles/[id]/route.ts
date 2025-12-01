@@ -1,23 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { requireAdmin } from '@/lib/middleware';
+import { prisma } from '@/lib/prisma';
+import { auth } from '@/lib/auth';
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authResult = await requireAdmin(request);
-    if (authResult.response) {
-      return authResult.response;
+    const session = await auth();
+    if (!session?.user || session.user.role !== 'admin') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const roleId = parseInt(params.id);
+    const { id } = await params;
+    const roleId = parseInt(id);
     const body = await request.json();
     const { name, description, permissionIds } = body;
 
     // Check if role exists
-    const existingRole = await db.role.findUnique({
+    const existingRole = await prisma.role.findUnique({
       where: { id: roleId },
     });
 
@@ -29,7 +30,7 @@ export async function PUT(
     }
 
     // Update role
-    const role = await db.role.update({
+    const role = await prisma.role.update({
       where: { id: roleId },
       data: {
         name: name !== undefined ? name : undefined,
@@ -40,13 +41,13 @@ export async function PUT(
     // Update permissions if provided
     if (permissionIds !== undefined) {
       // Delete existing permissions
-      await db.rolePermission.deleteMany({
+      await prisma.rolePermission.deleteMany({
         where: { roleId },
       });
 
       // Add new permissions
       if (permissionIds.length > 0) {
-        await db.rolePermission.createMany({
+        await prisma.rolePermission.createMany({
           data: permissionIds.map((permissionId: number) => ({
             roleId,
             permissionId,
@@ -56,7 +57,7 @@ export async function PUT(
     }
 
     // Fetch updated role with permissions
-    const updatedRole = await db.role.findUnique({
+    const updatedRole = await prisma.role.findUnique({
       where: { id: roleId },
       include: {
         rolePermissions: {
@@ -91,18 +92,19 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authResult = await requireAdmin(request);
-    if (authResult.response) {
-      return authResult.response;
+    const session = await auth();
+    if (!session?.user || session.user.role !== 'admin') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const roleId = parseInt(params.id);
+    const { id } = await params;
+    const roleId = parseInt(id);
 
     // Check if role exists
-    const role = await db.role.findUnique({
+    const role = await prisma.role.findUnique({
       where: { id: roleId },
     });
 
@@ -122,7 +124,7 @@ export async function DELETE(
     }
 
     // Delete role (cascade will delete related records)
-    await db.role.delete({
+    await prisma.role.delete({
       where: { id: roleId },
     });
 

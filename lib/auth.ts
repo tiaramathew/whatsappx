@@ -41,8 +41,8 @@ async function getUserWithPermissions(email: string) {
     const role = permissionsResult.rows.length > 0 ? permissionsResult.rows[0].role_name : null;
 
     // Build display name from first_name + last_name, fallback to username
-    const displayName = user.first_name && user.last_name 
-      ? `${user.first_name} ${user.last_name}` 
+    const displayName = user.first_name && user.last_name
+      ? `${user.first_name} ${user.last_name}`
       : user.username;
 
     return {
@@ -118,12 +118,12 @@ export const authConfig: NextAuthConfig = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id;
-        token.email = user.email;
-        token.name = user.name;
-        token.role = user.role;
-        token.permissions = user.permissions;
-        token.isActive = user.isActive;
+        token.id = user.id || '';
+        token.email = user.email || '';
+        token.name = user.name || null;
+        token.role = user.role || null;
+        token.permissions = user.permissions || [];
+        token.isActive = user.isActive || false;
       }
       return token;
     },

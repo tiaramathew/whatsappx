@@ -1,10 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { getEvolutionAPI } from '@/lib/evolution-api';
+import { getEvolutionAPI, EvolutionAPIClient } from '@/lib/evolution-api';
+import { prisma } from '@/lib/prisma';
+
+async function getClient(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: parseInt(userId) },
+    select: { evolutionApiUrl: true, evolutionApiKey: true }
+  });
+
+  if (user?.evolutionApiUrl && user?.evolutionApiKey) {
+    return new EvolutionAPIClient(user.evolutionApiUrl, user.evolutionApiKey);
+  }
+  return getEvolutionAPI();
+}
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -16,8 +29,8 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const instanceName = params.id;
-    const api = getEvolutionAPI();
+    const { id: instanceName } = await params;
+    const api = await getClient(session.user.id);
     await api.deleteInstance(instanceName);
 
     return NextResponse.json({ message: 'Instance deleted successfully' });
@@ -32,7 +45,7 @@ export async function DELETE(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -44,10 +57,10 @@ export async function PUT(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const instanceName = params.id;
+    const { id: instanceName } = await params;
     const body = await request.json();
     const { action } = body;
-    const api = getEvolutionAPI();
+    const api = await getClient(session.user.id);
 
     switch (action) {
       case 'restart':
