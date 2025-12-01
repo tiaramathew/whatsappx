@@ -152,3 +152,4 @@ export type SendMessageInput = z.infer<typeof sendMessageSchema>;
 export type WebhookConfigInput = z.infer<typeof webhookConfigSchema>;
 export type InstanceSettingsInput = z.infer<typeof instanceSettingsSchema>;
 
+
