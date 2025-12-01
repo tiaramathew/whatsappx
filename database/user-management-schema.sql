@@ -202,17 +202,18 @@ CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECU
 CREATE TRIGGER update_roles_updated_at BEFORE UPDATE ON roles FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_user_instance_access_updated_at BEFORE UPDATE ON user_instance_access FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Create default super admin user (password: admin123 - CHANGE THIS!)
--- Password hash for 'admin123' using bcrypt
+-- Create default super admin user
+-- Password: Hola173! (use scripts/setup-admin.ts to create/update)
+-- The bcrypt hash below is generated with 10 rounds
 INSERT INTO users (email, password_hash, name, role_id, is_active, is_verified)
 SELECT
-  'admin@whatsapp-dashboard.local',
-  '$2a$10$rQqJZ4Y.YvVXH8YjYqKqZO7YJ9qXqxN5qmQ5XJQqvH5XJQqvH5XJQ',  -- Password: admin123
+  'cc@siwaht.com',
+  '$2a$10$8KzaNdMwHqDELKGQxZx8/.q7MBBZnGmY0kT8UQRNbNLCqUvhvfOSu',  -- Password: Hola173!
   'System Administrator',
   (SELECT id FROM roles WHERE name = 'super_admin'),
   TRUE,
   TRUE
-WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'admin@whatsapp-dashboard.local');
+WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'cc@siwaht.com');
 
 -- Create views for user management
 CREATE OR REPLACE VIEW v_users_with_roles AS

@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Evolution } from '@/lib/evolution';
-import { requirePermission } from '@/lib/middleware';
+import { auth } from '@/lib/auth';
+import { getEvolutionAPI } from '@/lib/evolution-api';
 
 export async function POST(request: NextRequest) {
   try {
-    const authResult = await requirePermission(request, 'messages', 'create');
-    if (authResult.response) {
-      return authResult.response;
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!session.user.permissions.includes('messages.send')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const body = await request.json();
@@ -26,13 +30,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const api = getEvolutionAPI();
     let result;
 
     if (mediaUrl) {
-      result = await Evolution.message.sendMedia(instanceName, {
+      result = await api.sendMedia(instanceName, {
         number,
-        mediaUrl,
-        mediaType,
+        media: mediaUrl,
+        mediatype: mediaType,
         fileName,
         caption,
       });
@@ -44,23 +49,17 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      result = await Evolution.message.sendText(instanceName, {
+      result = await api.sendText(instanceName, {
         number,
         text,
       });
     }
 
-    if (!result.success) {
-      return NextResponse.json(
-        { error: result.error?.message || 'Failed to send message' },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json(result.data, { status: 201 });
-  } catch (error) {
+    return NextResponse.json(result, { status: 201 });
+  } catch (error: any) {
+    console.error('Error sending message:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: error.message || 'Failed to send message' },
       { status: 500 }
     );
   }

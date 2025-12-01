@@ -1,25 +1,21 @@
 "use client";
 
-import { useEffect } from "react";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/store/auth";
+import { useEffect } from "react";
 import { Loader2, MessageCircle } from "lucide-react";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
+  const { data: session, status } = useSession();
   const router = useRouter();
-  const { user, loading, fetchUser } = useAuth();
 
   useEffect(() => {
-    fetchUser();
-  }, [fetchUser]);
-
-  useEffect(() => {
-    if (!loading && !user) {
+    if (status === "unauthenticated") {
       router.push("/login");
     }
-  }, [loading, user, router]);
+  }, [status, router]);
 
-  if (loading) {
+  if (status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
         <div className="text-center">
@@ -35,7 +31,13 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user) {
+  if (!session?.user) {
+    return null;
+  }
+
+  // Check if user is active
+  if (!session.user.isActive) {
+    router.push("/login?error=account_disabled");
     return null;
   }
 

@@ -1,27 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Evolution } from '@/lib/evolution';
-import { requirePermission } from '@/lib/middleware';
+import { auth } from '@/lib/auth';
+import { getEvolutionAPI } from '@/lib/evolution-api';
 
 export async function GET(request: NextRequest) {
   try {
-    const authResult = await requirePermission(request, 'instances', 'read');
-    if (authResult.response) {
-      return authResult.response;
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const result = await Evolution.instance.fetchInstances();
-
-    if (!result.success) {
-      return NextResponse.json(
-        { error: result.error?.message || 'Failed to fetch instances' },
-        { status: 500 }
-      );
+    if (!session.user.permissions.includes('instances.read')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    return NextResponse.json(result.data);
-  } catch (error) {
+    const api = getEvolutionAPI();
+    const instances = await api.fetchInstances();
+
+    return NextResponse.json(instances);
+  } catch (error: any) {
+    console.error('Error fetching instances:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: error.message || 'Failed to fetch instances' },
       { status: 500 }
     );
   }
@@ -29,9 +28,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const authResult = await requirePermission(request, 'instances', 'create');
-    if (authResult.response) {
-      return authResult.response;
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!session.user.permissions.includes('instances.create')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const body = await request.json();
@@ -44,19 +47,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await Evolution.instance.create(instanceName);
+    const api = getEvolutionAPI();
+    const result = await api.createInstance({ instanceName });
 
-    if (!result.success) {
-      return NextResponse.json(
-        { error: result.error?.message || 'Failed to create instance' },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json(result.data, { status: 201 });
-  } catch (error) {
+    return NextResponse.json(result, { status: 201 });
+  } catch (error: any) {
+    console.error('Error creating instance:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: error.message || 'Failed to create instance' },
       { status: 500 }
     );
   }

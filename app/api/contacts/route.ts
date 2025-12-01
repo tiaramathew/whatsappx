@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Evolution } from '@/lib/evolution';
-import { requirePermission } from '@/lib/middleware';
+import { auth } from '@/lib/auth';
+import { getEvolutionAPI } from '@/lib/evolution-api';
 
 export async function GET(request: NextRequest) {
   try {
-    const authResult = await requirePermission(request, 'contacts', 'read');
-    if (authResult.response) {
-      return authResult.response;
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    if (!session.user.permissions.includes('contacts.read')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const instanceName = searchParams.get('instance');
 
@@ -18,19 +23,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const result = await Evolution.contact.fetchContacts(instanceName);
+    const api = getEvolutionAPI();
+    const contacts = await api.findContacts(instanceName);
 
-    if (!result.success) {
-      return NextResponse.json(
-        { error: result.error?.message || 'Failed to fetch contacts' },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json(result.data);
-  } catch (error) {
+    return NextResponse.json(contacts);
+  } catch (error: any) {
+    console.error('Error fetching contacts:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: error.message || 'Failed to fetch contacts' },
       { status: 500 }
     );
   }

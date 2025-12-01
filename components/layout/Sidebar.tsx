@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,10 +13,10 @@ import {
     LogOut,
     Smartphone,
     Webhook,
-    Shield
+    Shield,
+    MessageCircle,
+    UsersRound
 } from "lucide-react";
-import { useAuth } from "@/lib/store/auth";
-import { useEffect } from "react";
 
 const routes = [
     {
@@ -43,6 +44,12 @@ const routes = [
         color: "text-orange-700",
     },
     {
+        label: "Groups",
+        icon: UsersRound,
+        href: "/groups",
+        color: "text-teal-600",
+    },
+    {
         label: "Webhooks",
         icon: Webhook,
         href: "/webhooks",
@@ -62,36 +69,31 @@ const adminRoutes = [
         href: "/users",
         color: "text-blue-500",
     },
-    {
-        label: "Roles",
-        icon: Shield,
-        href: "/roles",
-        color: "text-indigo-500",
-    },
 ];
 
 export const Sidebar = () => {
     const pathname = usePathname();
-    const router = useRouter();
-    const { user, fetchUser, logout: handleLogout } = useAuth();
+    const { data: session } = useSession();
 
-    useEffect(() => {
-        fetchUser();
-    }, [fetchUser]);
+    const isAdmin = session?.user?.role === "admin" || session?.user?.role === "super_admin";
 
-    const isAdmin = user?.roles.includes("admin") || user?.roles.includes("superadmin");
+    const handleLogout = async () => {
+        await signOut({ callbackUrl: '/login' });
+    };
 
     return (
-        <div className="space-y-4 py-4 flex flex-col h-full bg-secondary text-secondary-foreground">
+        <div className="space-y-4 py-4 flex flex-col h-full bg-slate-900 text-slate-100">
             <div className="px-3 py-2 flex-1">
-                <Link href="/" className="flex items-center pl-3 mb-14">
-                    <div className="relative w-8 h-8 mr-4">
-                        {/* Logo placeholder */}
-                        <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center font-bold text-primary-foreground">W</div>
+                <Link href="/" className="flex items-center pl-3 mb-10">
+                    <div className="relative w-10 h-10 mr-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg">
+                            <MessageCircle className="h-5 w-5 text-white" />
+                        </div>
                     </div>
-                    <h1 className="text-2xl font-bold">
-                        WhatsApp
-                    </h1>
+                    <div>
+                        <h1 className="text-lg font-bold text-white">WhatsApp</h1>
+                        <p className="text-xs text-slate-400">Dashboard</p>
+                    </div>
                 </Link>
                 <div className="space-y-1">
                     {routes.map((route) => (
@@ -99,20 +101,25 @@ export const Sidebar = () => {
                             key={route.href}
                             href={route.href}
                             className={cn(
-                                "text-sm group flex p-3 w-full justify-start font-medium cursor-pointer hover:text-primary hover:bg-primary/10 rounded-lg transition",
-                                pathname === route.href ? "text-primary bg-primary/10" : "text-muted-foreground"
+                                "text-sm group flex p-3 w-full justify-start font-medium cursor-pointer hover:bg-slate-800 rounded-lg transition",
+                                pathname === route.href 
+                                    ? "bg-slate-800 text-white" 
+                                    : "text-slate-400 hover:text-white"
                             )}
                         >
                             <div className="flex items-center flex-1">
-                                <route.icon className={cn("h-5 w-5 mr-3", route.color)} />
+                                <route.icon className={cn(
+                                    "h-5 w-5 mr-3",
+                                    pathname === route.href ? route.color : ""
+                                )} />
                                 {route.label}
                             </div>
                         </Link>
                     ))}
                     {isAdmin && (
                         <>
-                            <div className="pt-4 pb-2 px-3">
-                                <div className="text-xs font-semibold text-muted-foreground uppercase">
+                            <div className="pt-6 pb-2 px-3">
+                                <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
                                     Administration
                                 </div>
                             </div>
@@ -121,12 +128,17 @@ export const Sidebar = () => {
                                     key={route.href}
                                     href={route.href}
                                     className={cn(
-                                        "text-sm group flex p-3 w-full justify-start font-medium cursor-pointer hover:text-primary hover:bg-primary/10 rounded-lg transition",
-                                        pathname === route.href ? "text-primary bg-primary/10" : "text-muted-foreground"
+                                        "text-sm group flex p-3 w-full justify-start font-medium cursor-pointer hover:bg-slate-800 rounded-lg transition",
+                                        pathname === route.href 
+                                            ? "bg-slate-800 text-white" 
+                                            : "text-slate-400 hover:text-white"
                                     )}
                                 >
                                     <div className="flex items-center flex-1">
-                                        <route.icon className={cn("h-5 w-5 mr-3", route.color)} />
+                                        <route.icon className={cn(
+                                            "h-5 w-5 mr-3",
+                                            pathname === route.href ? route.color : ""
+                                        )} />
                                         {route.label}
                                     </div>
                                 </Link>
@@ -135,10 +147,25 @@ export const Sidebar = () => {
                     )}
                 </div>
             </div>
-            <div className="px-3 py-2">
+            <div className="px-3 py-2 border-t border-slate-800">
+                {session?.user && (
+                    <div className="flex items-center gap-3 px-3 py-2 mb-2">
+                        <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white text-sm font-medium">
+                            {session.user.name?.[0]?.toUpperCase() || 'U'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-white truncate">
+                                {session.user.name || 'User'}
+                            </p>
+                            <p className="text-xs text-slate-400 truncate">
+                                {session.user.email}
+                            </p>
+                        </div>
+                    </div>
+                )}
                 <Button 
                     variant="ghost" 
-                    className="w-full justify-start text-muted-foreground hover:text-primary hover:bg-primary/10"
+                    className="w-full justify-start text-slate-400 hover:text-white hover:bg-slate-800"
                     onClick={handleLogout}
                 >
                     <LogOut className="h-5 w-5 mr-3" />

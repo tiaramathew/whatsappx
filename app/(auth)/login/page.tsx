@@ -1,48 +1,50 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { useToast } from "@/components/ui/use-toast";
-import { Loader2, MessageCircle, Eye, EyeOff } from "lucide-react";
-import axios from "axios";
+import { Loader2, MessageCircle, Eye, EyeOff, AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { toast } = useToast();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
 
+  // Check for error from URL params
+  const urlError = searchParams.get('error');
+  const callbackUrl = searchParams.get('callbackUrl') || '/';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
 
     try {
-      const response = await axios.post("/api/auth/login", formData);
-      
-      if (response.data.success) {
-        toast({
-          title: "Welcome back!",
-          description: "You have been logged in successfully.",
-        });
-        router.push("/");
+      const result = await signIn('credentials', {
+        email: formData.email,
+        password: formData.password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError('Invalid email or password. Please try again.');
+      } else if (result?.ok) {
+        router.push(callbackUrl);
         router.refresh();
       }
-    } catch (error: any) {
-      const message = error.response?.data?.error || "Failed to login. Please try again.";
-      toast({
-        title: "Login Failed",
-        description: message,
-        variant: "destructive",
-      });
+    } catch (err) {
+      setError('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -58,13 +60,19 @@ export default function LoginPage() {
           <div className="mx-auto w-14 h-14 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg">
             <MessageCircle className="h-7 w-7 text-white" />
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight">Welcome back</CardTitle>
+          <CardTitle className="text-2xl font-bold tracking-tight">WhatsApp Dashboard</CardTitle>
           <CardDescription className="text-slate-600">
             Sign in to your account to continue
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4 pt-4">
+            {(error || urlError) && (
+              <div className="flex items-center gap-2 p-3 text-sm text-red-600 bg-red-50 rounded-lg border border-red-200">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                <span>{error || (urlError === 'account_disabled' ? 'Your account has been disabled.' : 'Authentication failed.')}</span>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="email" className="text-slate-700">Email address</Label>
               <Input
@@ -120,12 +128,6 @@ export default function LoginPage() {
                 "Sign in"
               )}
             </Button>
-            <p className="text-sm text-center text-slate-600">
-              Don&apos;t have an account?{" "}
-              <Link href="/register" className="font-medium text-emerald-600 hover:text-emerald-700 transition-colors">
-                Create one
-              </Link>
-            </p>
           </CardFooter>
         </form>
       </Card>

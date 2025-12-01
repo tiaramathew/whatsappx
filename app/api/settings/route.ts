@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Evolution } from '@/lib/evolution';
-import { requirePermission } from '@/lib/middleware';
+import { auth } from '@/lib/auth';
+import { getEvolutionAPI } from '@/lib/evolution-api';
 
-export async function PUT(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const authResult = await requirePermission(request, 'settings', 'update');
-    if (authResult.response) {
-      return authResult.response;
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json();
-    const { instanceName, rejectCall, alwaysOnline, readMessages, readStatus, syncFullHistory } = body;
+    if (!session.user.permissions.includes('settings.read')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const searchParams = request.nextUrl.searchParams;
+    const instanceName = searchParams.get('instance');
 
     if (!instanceName) {
       return NextResponse.json(
@@ -19,25 +23,48 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const result = await Evolution.instance.setSettings(instanceName, {
-      rejectCall,
-      alwaysOnline,
-      readMessages,
-      readStatus,
-      syncFullHistory,
-    });
+    const api = getEvolutionAPI();
+    const settings = await api.getSettings(instanceName);
 
-    if (!result.success) {
+    return NextResponse.json(settings);
+  } catch (error: any) {
+    console.error('Error fetching settings:', error);
+    return NextResponse.json(
+      { error: error.message || 'Failed to get settings' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!session.user.permissions.includes('settings.update')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const { instanceName, ...settings } = body;
+
+    if (!instanceName) {
       return NextResponse.json(
-        { error: result.error?.message || 'Failed to update settings' },
-        { status: 500 }
+        { error: 'Instance name is required' },
+        { status: 400 }
       );
     }
 
+    const api = getEvolutionAPI();
+    await api.setSettings(instanceName, settings);
+
     return NextResponse.json({ message: 'Settings updated successfully' });
-  } catch (error) {
+  } catch (error: any) {
+    console.error('Error updating settings:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: error.message || 'Failed to update settings' },
       { status: 500 }
     );
   }

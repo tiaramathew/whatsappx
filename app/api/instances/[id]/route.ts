@@ -1,31 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Evolution } from '@/lib/evolution';
-import { requirePermission } from '@/lib/middleware';
+import { auth } from '@/lib/auth';
+import { getEvolutionAPI } from '@/lib/evolution-api';
 
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const authResult = await requirePermission(request, 'instances', 'delete');
-    if (authResult.response) {
-      return authResult.response;
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    if (!session.user.permissions.includes('instances.delete')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const instanceName = params.id;
-
-    const result = await Evolution.instance.delete(instanceName);
-
-    if (!result.success) {
-      return NextResponse.json(
-        { error: result.error?.message || 'Failed to delete instance' },
-        { status: 500 }
-      );
-    }
+    const api = getEvolutionAPI();
+    await api.deleteInstance(instanceName);
 
     return NextResponse.json({ message: 'Instance deleted successfully' });
-  } catch (error) {
+  } catch (error: any) {
+    console.error('Error deleting instance:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: error.message || 'Failed to delete instance' },
       { status: 500 }
     );
   }
@@ -36,61 +35,40 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const authResult = await requirePermission(request, 'instances', 'update');
-    if (authResult.response) {
-      return authResult.response;
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!session.user.permissions.includes('instances.update')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const instanceName = params.id;
     const body = await request.json();
     const { action } = body;
+    const api = getEvolutionAPI();
 
-    if (action === 'restart') {
-      const result = await Evolution.instance.restart(instanceName);
+    switch (action) {
+      case 'restart':
+        await api.restartInstance(instanceName);
+        return NextResponse.json({ message: 'Instance restarted successfully' });
 
-      if (!result.success) {
-        return NextResponse.json(
-          { error: result.error?.message || 'Failed to restart instance' },
-          { status: 500 }
-        );
-      }
+      case 'connect':
+        const connectResult = await api.connectInstance(instanceName);
+        return NextResponse.json(connectResult);
 
-      return NextResponse.json({ message: 'Instance restarted successfully' });
+      case 'logout':
+        await api.logoutInstance(instanceName);
+        return NextResponse.json({ message: 'Instance logged out successfully' });
+
+      default:
+        return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
-
-    if (action === 'connect') {
-      const result = await Evolution.instance.connect(instanceName);
-
-      if (!result.success) {
-        return NextResponse.json(
-          { error: result.error?.message || 'Failed to connect instance' },
-          { status: 500 }
-        );
-      }
-
-      return NextResponse.json(result.data);
-    }
-
-    if (action === 'logout') {
-      const result = await Evolution.instance.logout(instanceName);
-
-      if (!result.success) {
-        return NextResponse.json(
-          { error: result.error?.message || 'Failed to logout instance' },
-          { status: 500 }
-        );
-      }
-
-      return NextResponse.json({ message: 'Instance logged out successfully' });
-    }
-
+  } catch (error: any) {
+    console.error('Error updating instance:', error);
     return NextResponse.json(
-      { error: 'Invalid action' },
-      { status: 400 }
-    );
-  } catch (error) {
-    return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: error.message || 'Failed to update instance' },
       { status: 500 }
     );
   }
