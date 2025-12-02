@@ -1,37 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { getEvolutionAPI } from '@/lib/evolution-api';
+import { prisma } from '@/lib/prisma';
 
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    if (!session.user.permissions.includes('contacts.read')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
+    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const searchParams = request.nextUrl.searchParams;
     const instanceName = searchParams.get('instance');
+    const search = searchParams.get('search');
 
-    if (!instanceName) {
-      return NextResponse.json(
-        { error: 'Instance name is required' },
-        { status: 400 }
-      );
-    }
+    if (!instanceName) return NextResponse.json({ error: 'Instance name required' }, { status: 400 });
 
-    const api = getEvolutionAPI();
-    const contacts = await api.findContacts(instanceName);
+    const contacts = await prisma.contact.findMany({
+      where: {
+        instanceName,
+        OR: search ? [
+          { name: { contains: search, mode: 'insensitive' } },
+          { pushName: { contains: search, mode: 'insensitive' } },
+          { phone: { contains: search, mode: 'insensitive' } },
+        ] : undefined,
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
 
     return NextResponse.json(contacts);
   } catch (error: any) {
-    console.error('Error fetching contacts:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to fetch contacts' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const body = await request.json();
+    const { instanceName, name, phone, email, tags } = body;
+
+    const contact = await prisma.contact.create({
+      data: {
+        instanceName,
+        remoteJid: `${phone}@s.whatsapp.net`,
+        name,
+        phone,
+        email,
+        tags,
+      },
+    });
+
+    return NextResponse.json(contact);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

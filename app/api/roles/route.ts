@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Pool } from 'pg';
 import { auth } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
-
-// GET /api/roles - List all roles
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();
@@ -14,21 +9,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const client = await pool.connect();
-    try {
-      const result = await client.query(`
-        SELECT id, name, description, created_at, updated_at
-        FROM roles
-        ORDER BY name
-      `);
+    // Assuming any authenticated user can list roles for now, or restrict to admin
+    // if (!session.user.permissions.includes('roles.read')) ...
 
-      return NextResponse.json({ roles: result.rows });
-    } finally {
-      client.release();
-    }
+    const roles = await prisma.role.findMany({
+      orderBy: { name: 'asc' }
+    });
+
+    return NextResponse.json(roles);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-
-

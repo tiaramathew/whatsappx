@@ -3,6 +3,24 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getEvolutionAPI } from '@/lib/evolution-api';
 
+export async function GET(request: NextRequest) {
+    try {
+        const session = await auth();
+        if (!session?.user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const broadcasts = await prisma.broadcast.findMany({
+            where: { userId: parseInt(session.user.id) },
+            orderBy: { createdAt: 'desc' },
+        });
+
+        return NextResponse.json(broadcasts);
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
 export async function POST(request: NextRequest) {
     try {
         const session = await auth();

@@ -35,13 +35,14 @@ export async function POST(request: NextRequest) {
           }
         });
 
-        // Cache contact info if not from me
+        // Sync Contact
         if (!message.key.fromMe) {
+          // Keep legacy cache for now
           await prisma.contactCache.upsert({
             where: { remoteJid: message.key.remoteJid },
             update: {
               pushName: message.pushName || undefined,
-              instanceName, // Update instance name to latest interaction
+              instanceName,
               updatedAt: new Date(),
             },
             create: {
@@ -51,7 +52,96 @@ export async function POST(request: NextRequest) {
               isGroup: message.key.remoteJid.endsWith('@g.us'),
             }
           });
+
+          // Sync to Contact table
+          await prisma.contact.upsert({
+            where: {
+              instanceName_remoteJid: {
+                instanceName,
+                remoteJid: message.key.remoteJid,
+              },
+            },
+            update: {
+              pushName: message.pushName || undefined,
+              lastSeenAt: new Date(),
+            },
+            create: {
+              instanceName,
+              remoteJid: message.key.remoteJid,
+              pushName: message.pushName,
+              name: message.pushName || message.key.remoteJid.split('@')[0],
+              phone: message.key.remoteJid.split('@')[0],
+            },
+          });
         }
+
+        // Sync Conversation
+        const conversation = await prisma.conversation.upsert({
+          where: {
+            instanceName_remoteJid: {
+              instanceName,
+              remoteJid: message.key.remoteJid,
+            },
+          },
+          update: {
+            lastMessageAt: new Date(),
+            lastMessage:
+              message.message?.conversation ||
+              message.message?.extendedTextMessage?.text ||
+              message.message?.imageMessage?.caption ||
+              'Media message',
+            unreadCount: message.key.fromMe ? undefined : { increment: 1 },
+          },
+          create: {
+            instanceName,
+            remoteJid: message.key.remoteJid,
+            lastMessageAt: new Date(),
+            lastMessage:
+              message.message?.conversation ||
+              message.message?.extendedTextMessage?.text ||
+              message.message?.imageMessage?.caption ||
+              'Media message',
+            unreadCount: message.key.fromMe ? 0 : 1,
+            contact: {
+              connectOrCreate: {
+                where: {
+                  instanceName_remoteJid: {
+                    instanceName,
+                    remoteJid: message.key.remoteJid,
+                  },
+                },
+                create: {
+                  instanceName,
+                  remoteJid: message.key.remoteJid,
+                  pushName: message.pushName,
+                  name: message.pushName || message.key.remoteJid.split('@')[0],
+                  phone: message.key.remoteJid.split('@')[0],
+                },
+              },
+            },
+          },
+        });
+
+        // Sync Message
+        const messageContent =
+          message.message?.conversation ||
+          message.message?.extendedTextMessage?.text ||
+          message.message?.imageMessage?.caption ||
+          '';
+
+        const messageType = Object.keys(message.message || {})[0] || 'unknown';
+
+        await prisma.message.create({
+          data: {
+            conversationId: conversation.id,
+            keyId: message.key.id,
+            fromMe: message.key.fromMe,
+            type: messageType,
+            content: messageContent,
+            status: 'delivered',
+            timestamp: new Date(message.messageTimestamp * 1000),
+          },
+        });
       }
 
       // Ignore messages sent by the bot itself or status updates

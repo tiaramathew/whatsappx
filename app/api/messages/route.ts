@@ -1,66 +1,70 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 import { getEvolutionAPI } from '@/lib/evolution-api';
+
+export async function GET(request: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const searchParams = request.nextUrl.searchParams;
+    const conversationId = searchParams.get('conversationId');
+
+    if (!conversationId) return NextResponse.json({ error: 'Conversation ID required' }, { status: 400 });
+
+    const messages = await prisma.message.findMany({
+      where: { conversationId: parseInt(conversationId) },
+      orderBy: { timestamp: 'asc' },
+    });
+
+    return NextResponse.json(messages);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    if (!session.user.permissions.includes('messages.send')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
+    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json();
-    const { instanceName, number, text, mediaUrl, mediaType, fileName, caption } = body;
-
-    if (!instanceName || typeof instanceName !== 'string') {
-      return NextResponse.json(
-        { error: 'Instance name is required' },
-        { status: 400 }
-      );
-    }
-
-    if (!number || typeof number !== 'string') {
-      return NextResponse.json(
-        { error: 'Recipient number is required' },
-        { status: 400 }
-      );
-    }
+    const { instanceName, remoteJid, content, conversationId } = body;
 
     const api = getEvolutionAPI();
-    let result;
+    const result = await api.sendText(instanceName, {
+      number: remoteJid.replace('@s.whatsapp.net', ''),
+      text: content,
+      delay: 0,
+      linkPreview: true
+    });
 
-    if (mediaUrl) {
-      result = await api.sendMedia(instanceName, {
-        number,
-        media: mediaUrl,
-        mediatype: mediaType,
-        fileName,
-        caption,
-      });
-    } else {
-      if (!text) {
-        return NextResponse.json(
-          { error: 'Message text is required' },
-          { status: 400 }
-        );
-      }
+    // Save to DB
+    // Note: Webhook will also save it, but we might want to save it immediately for UI responsiveness
+    // However, to avoid duplicates, we should rely on webhook or use the ID returned by Evolution.
+    // Evolution returns the message object.
 
-      result = await api.sendText(instanceName, {
-        number,
-        text,
+    // Ideally, we wait for webhook. But for better UX, we can optimistically add it.
+    // For now, let's just return the result and let the frontend poll or wait for webhook.
+    // Or we can create it here if we have the ID.
+
+    if (result?.data?.key?.id) {
+      await prisma.message.create({
+        data: {
+          conversationId: parseInt(conversationId),
+          keyId: result.data.key.id,
+          fromMe: true,
+          type: 'text',
+          content: content,
+          status: 'sent',
+          timestamp: new Date(),
+        }
       });
     }
 
-    return NextResponse.json(result, { status: 201 });
+    return NextResponse.json(result);
   } catch (error: any) {
-    console.error('Error sending message:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to send message' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

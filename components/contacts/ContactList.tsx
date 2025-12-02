@@ -1,3 +1,7 @@
+'use client';
+
+import { useQuery } from '@tanstack/react-query';
+import axios from 'axios';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,33 +20,33 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { MoreHorizontal, MessageSquare } from "lucide-react";
+import { useSearchParams } from 'next/navigation';
 
-// Mock data
-const contacts = [
-    {
-        id: "1",
-        name: "Alice Johnson",
-        phone: "+1234567890",
-        profilePicture: "",
-        isWhatsApp: true,
-    },
-    {
-        id: "2",
-        name: "Bob Smith",
-        phone: "+0987654321",
-        profilePicture: "",
-        isWhatsApp: true,
-    },
-    {
-        id: "3",
-        name: "Charlie Brown",
-        phone: "+1122334455",
-        profilePicture: "",
-        isWhatsApp: false,
-    },
-];
+interface Contact {
+    id: number;
+    name: string | null;
+    pushName: string | null;
+    phone: string | null;
+    profilePicUrl: string | null;
+    tags: string[];
+}
 
 export const ContactList = () => {
+    const searchParams = useSearchParams();
+    const instanceName = searchParams.get('instance') || 'main';
+
+    const { data: contacts, isLoading } = useQuery({
+        queryKey: ['contacts', instanceName],
+        queryFn: async () => {
+            const res = await axios.get(`/api/contacts?instance=${instanceName}`);
+            return res.data as Contact[];
+        },
+    });
+
+    if (isLoading) {
+        return <div className="p-4 text-center">Loading contacts...</div>;
+    }
+
     return (
         <div className="rounded-md border">
             <Table>
@@ -51,29 +55,27 @@ export const ContactList = () => {
                         <TableHead className="w-[100px]">Avatar</TableHead>
                         <TableHead>Name</TableHead>
                         <TableHead>Phone</TableHead>
-                        <TableHead>Status</TableHead>
+                        <TableHead>Tags</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {contacts.map((contact) => (
+                    {contacts?.map((contact) => (
                         <TableRow key={contact.id}>
                             <TableCell>
                                 <Avatar>
-                                    <AvatarImage src={contact.profilePicture} />
+                                    <AvatarImage src={contact.profilePicUrl || ''} />
                                     <AvatarFallback>
-                                        {contact.name.substring(0, 2).toUpperCase()}
+                                        {(contact.name || contact.pushName || '?').substring(0, 2).toUpperCase()}
                                     </AvatarFallback>
                                 </Avatar>
                             </TableCell>
-                            <TableCell className="font-medium">{contact.name}</TableCell>
+                            <TableCell className="font-medium">{contact.name || contact.pushName || 'Unknown'}</TableCell>
                             <TableCell>{contact.phone}</TableCell>
                             <TableCell>
-                                {contact.isWhatsApp ? (
-                                    <Badge variant="secondary">WhatsApp</Badge>
-                                ) : (
-                                    <Badge variant="outline">SMS</Badge>
-                                )}
+                                {contact.tags.map(tag => (
+                                    <Badge key={tag} variant="secondary" className="mr-1">{tag}</Badge>
+                                ))}
                             </TableCell>
                             <TableCell className="text-right">
                                 <DropdownMenu>
@@ -94,6 +96,13 @@ export const ContactList = () => {
                             </TableCell>
                         </TableRow>
                     ))}
+                    {contacts?.length === 0 && (
+                        <TableRow>
+                            <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
+                                No contacts found. Add one to get started.
+                            </TableCell>
+                        </TableRow>
+                    )}
                 </TableBody>
             </Table>
         </div>
