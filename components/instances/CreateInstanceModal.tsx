@@ -13,6 +13,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus } from "lucide-react";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { useInstancesStore } from "@/lib/store/instances";
 import { useToast } from "@/components/ui/use-toast";
 import { useState } from "react";
@@ -20,6 +27,7 @@ import { useState } from "react";
 export const CreateInstanceModal = () => {
     const [open, setOpen] = useState(false);
     const [instanceName, setInstanceName] = useState("");
+    const [integration, setIntegration] = useState("WHATSAPP-BAILEYS");
     const [loading, setLoading] = useState(false);
     const { addInstance } = useInstancesStore();
     const { toast } = useToast();
@@ -41,7 +49,10 @@ export const CreateInstanceModal = () => {
             const response = await fetch('/api/instances', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ instanceName: instanceName.trim() }),
+                body: JSON.stringify({
+                    instanceName: instanceName.trim(),
+                    integration
+                }),
             });
 
             if (!response.ok) {
@@ -100,6 +111,21 @@ export const CreateInstanceModal = () => {
                                 disabled={loading}
                                 required
                             />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="integration" className="text-right">
+                                Channel
+                            </Label>
+                            <Select value={integration} onValueChange={setIntegration}>
+                                <SelectTrigger className="col-span-3">
+                                    <SelectValue placeholder="Select channel" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="WHATSAPP-BAILEYS">Baileys</SelectItem>
+                                    <SelectItem value="WHATSAPP-BUSINESS">WhatsApp Cloud API</SelectItem>
+                                    <SelectItem value="EVOLUTION">Evolution</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
                     </div>
                     <DialogFooter>

@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { instanceName } = body;
+    const { instanceName, integration } = body;
 
     if (!instanceName || typeof instanceName !== 'string') {
       return NextResponse.json(
@@ -61,7 +61,10 @@ export async function POST(request: NextRequest) {
     }
 
     const api = await getClient(session.user.id);
-    const result = await api.createInstance({ instanceName });
+    const result = await api.createInstance({
+      instanceName,
+      integration: integration || 'WHATSAPP-BAILEYS'
+    });
 
     return NextResponse.json(result, { status: 201 });
   } catch (error: any) {
