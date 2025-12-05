@@ -3,6 +3,13 @@ import { UserDialog } from "@/components/admin/UserDialog";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 
+import { Metadata } from "next";
+
+export const metadata: Metadata = {
+    title: "User Management",
+    description: "Manage users, roles, and permissions.",
+};
+
 export default function UsersPage() {
     return (
         <div className="flex-1 space-y-4 p-8 pt-6 animate-in-fade">

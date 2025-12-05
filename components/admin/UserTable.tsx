@@ -66,7 +66,7 @@ export function UserTable() {
 
     return (
         <>
-            <div className="rounded-md border glass-card">
+            <div className="rounded-md border glass-card overflow-x-auto">
                 <Table>
                     <TableHeader>
                         <TableRow>

@@ -1,5 +1,12 @@
 import { StripeManager } from "@/components/stripe/StripeManager";
 
+import { Metadata } from "next";
+
+export const metadata: Metadata = {
+    title: "Stripe Integration",
+    description: "Manage Stripe payments and connections.",
+};
+
 export default function StripePage() {
     return (
         <div className="flex-1 space-y-4 p-8 pt-6">

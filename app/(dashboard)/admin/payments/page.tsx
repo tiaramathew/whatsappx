@@ -1,6 +1,13 @@
 import { PaymentTable } from "@/components/admin/PaymentTable";
 import { CreditCard } from "lucide-react";
 
+import { Metadata } from "next";
+
+export const metadata: Metadata = {
+    title: "Payment Management",
+    description: "View user subscriptions and payment history.",
+};
+
 export default function PaymentsPage() {
     return (
         <div className="flex-1 space-y-4 p-8 pt-6 animate-in-fade">

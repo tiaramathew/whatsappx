@@ -1,5 +1,12 @@
 import { KnowledgeBaseManager } from "@/components/knowledge-base/KnowledgeBaseManager";
 
+import { Metadata } from "next";
+
+export const metadata: Metadata = {
+    title: "Knowledge Base",
+    description: "Manage vector database connections and data.",
+};
+
 export default function KnowledgeBasePage() {
     return (
         <div className="flex-1 space-y-4 p-8 pt-6">
