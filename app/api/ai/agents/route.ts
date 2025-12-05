@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { name, systemPrompt, model, temperature, isActive } = body;
+        const { name, systemPrompt, model, temperature, isActive, toolIds } = body;
 
         if (!name || !systemPrompt) {
             return NextResponse.json(
@@ -50,6 +50,9 @@ export async function POST(request: NextRequest) {
                 temperature: temperature || 0.7,
                 isActive: isActive !== undefined ? isActive : true,
                 userId: parseInt(session.user.id),
+                tools: toolIds && toolIds.length > 0 ? {
+                    connect: toolIds.map((id: number) => ({ id }))
+                } : undefined
             },
         });
 

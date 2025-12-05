@@ -18,6 +18,10 @@ import { Plus } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Switch } from "@/components/ui/switch";
 
+import { Checkbox } from "@/components/ui/checkbox";
+import { useQuery } from "@tanstack/react-query";
+import axios from "axios";
+
 interface CreateAIAgentModalProps {
     onAgentCreated: (agent: any) => void;
 }
@@ -26,6 +30,16 @@ export const CreateAIAgentModal = ({ onAgentCreated }: CreateAIAgentModalProps) 
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const { toast } = useToast();
+    const [selectedTools, setSelectedTools] = useState<number[]>([]);
+
+    const { data: tools, isLoading: toolsLoading } = useQuery({
+        queryKey: ['tools'],
+        queryFn: async () => {
+            const res = await axios.get('/api/tools');
+            return res.data;
+        },
+        enabled: open // Only fetch when dialog is open
+    });
 
     const [formData, setFormData] = useState({
         name: "",
@@ -43,7 +57,7 @@ export const CreateAIAgentModal = ({ onAgentCreated }: CreateAIAgentModalProps) 
             const response = await fetch('/api/ai/agents', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData),
+                body: JSON.stringify({ ...formData, toolIds: selectedTools }),
             });
 
             if (!response.ok) {
@@ -67,6 +81,7 @@ export const CreateAIAgentModal = ({ onAgentCreated }: CreateAIAgentModalProps) 
                 temperature: 0.7,
                 isActive: true,
             });
+            setSelectedTools([]);
         } catch (error) {
             toast({
                 title: "Error",
@@ -160,6 +175,40 @@ export const CreateAIAgentModal = ({ onAgentCreated }: CreateAIAgentModalProps) 
                                 checked={formData.isActive}
                                 onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
                             />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Tools & Integrations</Label>
+                            <div className="border rounded-md p-4 space-y-2 bg-gray-50 dark:bg-gray-800/50 max-h-[150px] overflow-y-auto">
+                                {toolsLoading ? (
+                                    <div className="text-sm text-muted-foreground">Loading tools...</div>
+                                ) : tools?.length > 0 ? (
+                                    tools.map((tool: any) => (
+                                        <div key={tool.id} className="flex items-center space-x-2">
+                                            <Checkbox
+                                                id={`tool-${tool.id}`}
+                                                checked={selectedTools.includes(tool.id)}
+                                                onCheckedChange={(checked) => {
+                                                    setSelectedTools(prev =>
+                                                        checked
+                                                            ? [...prev, tool.id]
+                                                            : prev.filter(id => id !== tool.id)
+                                                    );
+                                                }}
+                                            />
+                                            <label
+                                                htmlFor={`tool-${tool.id}`}
+                                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2"
+                                            >
+                                                {tool.name}
+                                                <span className="text-xs text-muted-foreground">({tool.type})</span>
+                                            </label>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="text-sm text-muted-foreground">No tools available. Create one in the Tools section.</div>
+                                )}
+                            </div>
                         </div>
                     </div>
                     <DialogFooter>

@@ -22,7 +22,8 @@ import {
     Radio,
     Folder,
     Database,
-    CreditCard
+    CreditCard,
+    Plug
 } from "lucide-react";
 
 const routes = [
@@ -52,6 +53,13 @@ const routes = [
         icon: CreditCard,
         href: "/stripe",
         color: "text-blue-600",
+        section: "PLAYGROUND"
+    },
+    {
+        label: "Tools & MCP",
+        icon: Plug,
+        href: "/tools",
+        color: "text-orange-500",
         section: "PLAYGROUND"
     },
     {
