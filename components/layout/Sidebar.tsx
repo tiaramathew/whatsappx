@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { ModeToggle } from "@/components/mode-toggle";
 import { useSidebarStore } from "@/hooks/use-sidebar-store";
 import {
     LayoutDashboard,
@@ -183,20 +182,12 @@ export const Sidebar = () => {
                                         {session.user.role || 'Member'}
                                     </p>
                                 </div>
-                                <div className="flex flex-col gap-1">
-                                    <ModeToggle />
-                                    <Settings className="w-3.5 h-3.5 text-sidebar-foreground/40 group-hover:text-sidebar-foreground transition-colors" />
-                                </div>
+                                <Settings className="w-3.5 h-3.5 text-sidebar-foreground/40 group-hover:text-sidebar-foreground transition-colors" />
                             </>
                         )}
                     </div>
                 )}
 
-                {isCollapsed && (
-                    <div className="flex flex-col gap-2">
-                        <ModeToggle />
-                    </div>
-                )}
 
                 <Button
                     variant="ghost"
