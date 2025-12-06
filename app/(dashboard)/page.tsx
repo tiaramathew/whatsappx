@@ -18,7 +18,7 @@ import {
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
-async function getClient(userId: string) {
+async function getClient(userId: string): Promise<EvolutionAPIClient | null> {
     const user = await prisma.user.findUnique({
         where: { id: parseInt(userId) },
         select: { evolutionApiUrl: true, evolutionApiKey: true }
@@ -27,7 +27,15 @@ async function getClient(userId: string) {
     if (user?.evolutionApiUrl && user?.evolutionApiKey) {
         return new EvolutionAPIClient(user.evolutionApiUrl, user.evolutionApiKey);
     }
-    return getEvolutionAPI();
+    
+    const envUrl = process.env.EVOLUTION_API_URL;
+    const envKey = process.env.EVOLUTION_API_KEY;
+    
+    if (envUrl && envKey) {
+        return getEvolutionAPI();
+    }
+    
+    return null;
 }
 
 export default async function DashboardPage() {
@@ -44,23 +52,24 @@ export default async function DashboardPage() {
     const userName = session.user.name || "User";
     const firstName = userName.split(" ")[0];
 
-    // Fetch real stats with error handling
     let totalContacts = 0;
     let instances: any[] = [];
+    let apiConfigured = false;
 
     try {
         const api = await getClient(session.user.id);
+        apiConfigured = api !== null;
 
-        // Run independently to prevent one failure from blocking the other
+        const contactCountPromise = prisma.contact.count();
+        const instancesPromise = api ? api.fetchInstances() : Promise.resolve([]);
+
         const results = await Promise.allSettled([
-            prisma.contact.count(),
-            api.fetchInstances()
+            contactCountPromise,
+            instancesPromise
         ]);
 
         if (results[0].status === 'fulfilled') {
             totalContacts = results[0].value;
-        } else {
-            console.error("Failed to fetch contacts count:", results[0].reason);
         }
 
         if (results[1].status === 'fulfilled') {
@@ -70,8 +79,6 @@ export default async function DashboardPage() {
             } else if (response && Array.isArray(response.data)) {
                 instances = response.data;
             }
-        } else {
-            console.error("Failed to fetch instances:", results[1].reason);
         }
 
     } catch (error) {
