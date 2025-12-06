@@ -2,6 +2,7 @@
 
 import { MobileSidebar } from "@/components/layout/MobileSidebar";
 import { UserMenu } from "@/components/layout/UserMenu";
+import { ModeToggle } from "@/components/mode-toggle";
 import { usePathname } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
@@ -39,6 +40,7 @@ export const Header = () => {
             </div>
 
             <div className="flex w-full justify-end items-center space-x-2">
+                <ModeToggle />
                 <UserMenu />
             </div>
         </header>
