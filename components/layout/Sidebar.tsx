@@ -100,14 +100,8 @@ export const Sidebar = () => {
             <div className={cn("flex-1 overflow-y-auto custom-scrollbar py-6", isCollapsed ? "px-3" : "px-4")}>
                 {/* Header / Logo */}
                 <Link href="/" className={cn("flex items-center gap-3 mb-8 group cursor-pointer", isCollapsed ? "justify-center" : "px-2")}>
-                    <div className="relative w-9 h-9 shrink-0">
-                        <Image
-                            src="/logo.png"
-                            alt="Logo"
-                            width={36}
-                            height={36}
-                            className="object-contain w-full h-full"
-                        />
+                    <div className="relative w-10 h-10 bg-gradient-to-tr from-emerald-600 to-teal-600 rounded-xl flex items-center justify-center shadow-lg border border-white/10 shrink-0 transition-transform duration-300 group-hover:scale-105">
+                        <MessageCircle className="h-6 w-6 text-white text-shadow-sm" />
                     </div>
                     {!isCollapsed && (
                         <div className="flex flex-col">
